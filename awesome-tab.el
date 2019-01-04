@@ -168,6 +168,15 @@ visible."
   :group 'awesome-tab
   :type 'boolean)
 
+(defcustom awesome-tab-keys '(?a ?s ?d ?f ?g ?h ?j ?k ?l ?\; ?q ?w ?e ?r
+                                 ?t ?y ?u ?i ?o ?p ?z ?x ?c ?v ?b ?n ?m
+                                 ?A ?S ?D ?F ?G ?H ?J ?K ?L ?Q ?W ?E ?R
+                                 ?T ?Y ?U ?I ?O ?P ?Z ?X ?C ?V ?B ?N ?M)
+  "Default keys for jumping to specific tabs tabs. Any key is character
+representing a self-inserting key (letters, digits, punctuation, etc.)."
+  :type '(repeat :tag "Keys" (choice
+                              (character :tag "char"))))
+
 (defvar awesome-tab-inhibit-functions '(awesome-tab-default-inhibit-function)
   "List of functions to be called before displaying the tab bar.
 Those functions are called one by one, with no arguments, until one of
@@ -180,7 +189,11 @@ This is the tab set displayed on the tab bar.")
 
 (defvar awesome-tab-tab-label-function nil
   "Function that obtains a tab label displayed on the tab bar.
-The function is passed a tab and should return a string.")
+The function is passed a tab and should return a string with text properties.")
+
+(defvar awesome-tab-tab-key-function nil
+  "Function that obtains a tab's key displayed on the tab bar.
+The function is passed a index of tab and should return a string.")
 
 (defvar awesome-tab-select-tab-function nil
   "Function that select a tab.
@@ -259,8 +272,11 @@ room."
       (while (< w width)
         (setq n (1- n)
               w (+ w (char-width (aref str n)))))
-      (concat (substring str 0 i) el (substring str n)))
-     )))
+      (concat (substring str 0 i) el (substring str n))))))
+
+(defun awesome-tab-key-to-index (key)
+  "Return the index of KEY in `awesome-tab-keys'."
+  (seq-position awesome-tab-keys key))
 
 ;;; Tab and tab set
 ;;
@@ -401,6 +417,13 @@ Return TAB if selected, nil if not."
       (setq awesome-tab--track-selected awesome-tab-auto-scroll-flag))
     (put tabset 'select tab)))
 
+(defsubst awesome-tab-select-tab-index (index &optional tabset)
+  "Make the tab with index INDEX, the selected tab in TABSET.
+Does nothing if a tab with index INDEX is not found in TABSET.
+Return the tab selected, or nil if nothing was selected."
+  (let ((tabset (or tabset awesome-tab-current-tabset)))
+    (awesome-tab-select-tab (nth index (awesome-tab-tabs tabset))  tabset)))
+
 (defsubst awesome-tab-select-tab-value (object tabset)
   "Make the tab with value OBJECT, the selected tab in TABSET.
 Does nothing if a tab with value OBJECT is not found in TABSET.
@@ -426,8 +449,8 @@ Otherwise insert new tab on right of current tab."
              (selected (awesome-tab-selected-tab tabset))
              (selected-index (cl-position (car selected) (mapcar 'car tabs))))
         (awesome-tab-set-template tabset nil)
-        (set tabset (awesome-tab-insert-at tabs selected-index tab))
-        ))))
+        (set tabset (awesome-tab-insert-at tabs selected-index tab))))))
+
 
 (defun awesome-tab-insert-at (list index insert-element)
   (let ((counter 0)
@@ -472,6 +495,14 @@ TAB.  Return the tab found, or nil otherwise."
             tabs (cdr tabs)))
     (and tabs (if before last (nth 1 tabs)))))
 
+(defun awesome-tab-get-tab-by-index (tabset tab-index)
+  "Search in TABSET for the tab at TAB-INDEX."
+  (let* (last (tabs (awesome-tab-tabs tabset)))
+    (while (and tabs (not (eq tab (car tabs))))
+      (setq last (car tabs)
+            tabs (cdr tabs)))
+    (and tabs (if before last (nth 1 tabs)))))
+
 (defun awesome-tab-current-tabset (&optional update)
   "Return the tab set currently displayed on the tab bar.
 If optional argument UPDATE is non-nil, call the user defined function
@@ -495,8 +526,8 @@ current cached copy."
   '(
     (t
      :inherit default
-     :height 1.3
-     ))
+     :height 1.3))
+
   "Default face used in the tab bar."
   :group 'awesome-tab)
 
@@ -515,16 +546,26 @@ current cached copy."
 
 (defface awesome-tab-highlight
   '((t
-     :underline t
-     ))
+     :underline t))
+
   "Face used to highlight a tab during mouse-overs."
   :group 'awesome-tab)
 
 (defface awesome-tab-separator
   '((t
      :inherit awesome-tab-default
-     :height 0.1
-     ))
+     :height 0.1))
+
+  "Face used for separators between tabs."
+  :group 'awesome-tab)
+
+(defface awesome-tab-key
+  '((t
+     :inherit awesome-tab-default
+     :weight ultra-bold
+     :box (:line-width 2 :color "grey75" :style released-button)
+     :height 0.1))
+
   "Face used for separators between tabs."
   :group 'awesome-tab)
 
@@ -532,15 +573,15 @@ current cached copy."
   '((t
      :inherit awesome-tab-default
      :box (:line-width 1 :color "white" :style released-button)
-     :foreground "dark red"
-     ))
+     :foreground "dark red"))
+
   "Face used for tab bar buttons."
   :group 'awesome-tab)
 
 (defface awesome-tab-button-highlight
   '((t
-     :inherit awesome-tab-default
-     ))
+     :inherit awesome-tab-default))
+
   "Face used to highlight a button during mouse-overs."
   :group 'awesome-tab)
 
@@ -551,8 +592,8 @@ By default, use the background color specified for the
 background color of the `default' face otherwise."
   :group 'awesome-tab
   :type '((t
-           :inherit default
-           )))
+           :inherit default)))
+
 
 (defsubst awesome-tab-background-color ()
   "Return the background color of the tab bar."
@@ -580,8 +621,8 @@ background color of the `default' face otherwise."
           (repeat :tag "Image"
                   :extra-offset 2
                   (restricted-sexp :tag "Spec"
-                                   :match-alternatives (listp))))
-    )
+                                   :match-alternatives (listp)))))
+
   "Widget for editing a tab bar button.
 A button is specified as a pair (ENABLED-BUTTON . DISABLED-BUTTON),
 where ENABLED-BUTTON and DISABLED-BUTTON specify the value used when
@@ -851,8 +892,8 @@ element."
                       'face 'awesome-tab-button
                       'mouse-face 'awesome-tab-button-highlight
                       'pointer 'hand
-                      'local-map (awesome-tab-make-button-keymap name)
-                      )
+                      'local-map (awesome-tab-make-button-keymap name))
+
           (propertize (cdr label)
                       'face 'awesome-tab-button
                       'pointer 'arrow)))))
@@ -879,8 +920,8 @@ element."
                                        :width (car awesome-tab-separator))))
            ((propertize (or (car awesome-tab-separator) " ")
                         'face 'awesome-tab-separator
-                        'pointer 'arrow))))
-    ))
+                        'pointer 'arrow))))))
+
 
 (defsubst awesome-tab-line-buttons (tabset)
   "Return a list of propertized strings for tab bar buttons.
@@ -898,30 +939,35 @@ TABSET is the tab set used to choose the appropriate buttons."
      (cdr awesome-tab-scroll-right-button-value))
    awesome-tab-separator-value))
 
-(defsubst awesome-tab-line-tab (tab)
+(defsubst awesome-tab-line-tab (tab &optional tab-index)
   "Return the display representation of tab TAB.
 That is, a propertized string used as an `header-line-format' template
 element.
 Call `awesome-tab-tab-label-function' to obtain a label for TAB."
-  (concat (propertize
-           (if awesome-tab-tab-label-function
-               (funcall awesome-tab-tab-label-function tab)
-             tab)
-           'awesome-tab-tab tab
-           'local-map (awesome-tab-make-tab-keymap tab)
-           'mouse-face 'awesome-tab-highlight
-           'face (if (awesome-tab-selected-p tab (awesome-tab-current-tabset))
-                     'awesome-tab-selected
-                   'awesome-tab-unselected)
-           'pointer 'hand)
-          awesome-tab-separator-value))
+  (concat
+   (if (and tab-index awesome-tab-tab-key-function)
+       (funcall awesome-tab-tab-key-function tab-index)
+     "")
+   (propertize
+    (if awesome-tab-tab-label-function
+        (funcall awesome-tab-tab-label-function tab)
+      tab)
+    'awesome-tab-tab tab
+    'local-map (awesome-tab-make-tab-keymap tab)
+    'mouse-face 'awesome-tab-highlight
+    'face (if (awesome-tab-selected-p tab (awesome-tab-current-tabset))
+              'awesome-tab-selected
+            'awesome-tab-unselected)
+    'pointer 'hand)
+   awesome-tab-separator-value))
 
 (defun awesome-tab-line-format (tabset)
   "Return the `header-line-format' value to display TABSET."
   (let* ((sel (awesome-tab-selected-tab tabset))
          (tabs (awesome-tab-view tabset))
          (padcolor (awesome-tab-background-color))
-         atsel elts)
+         (tab-index -1)
+         atsel elts next-tab)
     ;; Initialize buttons and separator values.
     (or awesome-tab-separator-value
         (awesome-tab-line-separator))
@@ -937,9 +983,10 @@ Call `awesome-tab-tab-label-function' to obtain a label for TAB."
         (awesome-tab-scroll tabset -1)
         (setq tabs (awesome-tab-view tabset)))
       (while (and tabs (not atsel))
-        (setq elts  (cons (awesome-tab-line-tab (car tabs)) elts)
+        (setq tab-index (+ tab-index 1)
               atsel (eq (car tabs) sel)
-              tabs  (cdr tabs)))
+              elts  (cons (awesome-tab-line-tab (car tabs) tab-index) elts)
+              tabs (cdr tabs)))
       (setq elts (nreverse elts))
       ;; At this point the selected tab is the last elt in ELTS.
       ;; Scroll TABSET and ELTS until the selected tab becomes
@@ -966,7 +1013,8 @@ Call `awesome-tab-tab-label-function' to obtain a label for TAB."
       (setq awesome-tab--track-selected nil))
     ;; Format remaining tabs.
     (while tabs
-      (setq elts (cons (awesome-tab-line-tab (car tabs)) elts)
+      (setq tab-index (+ tab-index 1)
+            elts (cons (awesome-tab-line-tab (car tabs) tab-index) elts)
             tabs (cdr tabs)))
     ;; Cache and return the new tab bar.
     (awesome-tab-set-template
@@ -976,8 +1024,7 @@ Call `awesome-tab-tab-label-function' to obtain a label for TAB."
            (propertize "%-"
                        'face (list :background padcolor
                                    :foreground padcolor)
-                       'pointer 'arrow)))
-    ))
+                       'pointer 'arrow)))))
 
 (defun awesome-tab-line ()
   "Return the header line templates that represent the tab bar.
@@ -1034,8 +1081,8 @@ Optional argument TYPE is a mouse event type (see the function
         ;; to the first/last visible tab.
         (unless tab
           (setq tabset (awesome-tab-tabs tabset)
-                tab (car (if backward (last tabset) tabset))))
-        )
+                tab (car (if backward (last tabset) tabset)))))
+
        ;; Cycle through tab groups only.
        ((eq cycle 'groups)
         (setq tab (awesome-tab-tab-next ttabset selected backward))
@@ -1043,8 +1090,8 @@ Optional argument TYPE is a mouse event type (see the function
         ;; to the first/last available group.
         (unless tab
           (setq tabset (awesome-tab-tabs ttabset)
-                tab (car (if backward (last tabset) tabset))))
-        )
+                tab (car (if backward (last tabset) tabset)))))
+
        (t
         ;; Cycle through visible tabs then tab groups.
         (setq tab (awesome-tab-tab-next tabset selected backward))
@@ -1059,8 +1106,8 @@ Optional argument TYPE is a mouse event type (see the function
                   tab (car (if backward (last tabset) tabset))))
           ;; Select the first/last visible tab of the new group.
           (setq tabset (awesome-tab-tabs (awesome-tab-tab-tabset tab))
-                tab (car (if backward (last tabset) tabset))))
-        ))
+                tab (car (if backward (last tabset) tabset))))))
+
       (awesome-tab-click-on-tab tab type))))
 
 ;;;###autoload
@@ -1104,6 +1151,15 @@ Depend on the setting of the option `awesome-tab-cycle-scope'."
   (interactive)
   (let ((awesome-tab-cycle-scope 'tabs))
     (awesome-tab-cycle)))
+
+;;;###autoload
+(defun awesome-tab-jump (&optional char)
+  (interactive)
+  (let* ((char (or char (read-char "char: " t)))
+         (tab (awesome-tab-select-tab-index
+               (awesome-tab-key-to-index char))))
+    (when (and tab awesome-tab-select-tab-function)
+      (funcall awesome-tab-select-tab-function t tab))))
 
 ;;; Button press commands
 ;;
@@ -1246,8 +1302,8 @@ Returns non-nil if the new state is enabled.
             (buffer-list))
       ;; Restore previous `header-line-format'.
       (setq-default header-line-format awesome-tab--global-hlf)
-      (awesome-tab-free-tabsets-store))
-    ))
+      (awesome-tab-free-tabsets-store))))
+
 
 ;;; Buffer tabs
 ;;
@@ -1403,16 +1459,15 @@ or groups.  Call the function `awesome-tab-button-label' otherwise."
         (setcar lab
                 (if awesome-tab--buffer-show-groups
                     (propertize (or (caar btn) (car lab)) 'display on)
-                  (propertize (or (cadr btn) (car lab)) 'display off)))
-        ))
+                  (propertize (or (cadr btn) (car lab)) 'display off)))))
     lab))
 
 (defun awesome-tab-buffer-tab-label (tab)
   "Return a label for TAB.
 That is, a string used to represent it on the tab bar."
-  (let ((label  (if awesome-tab--buffer-show-groups
-                    (format " [%s] " (awesome-tab-tab-tabset tab))
-                  (format " %s " (awesome-tab-tab-value tab)))))
+  (let ((label (if awesome-tab--buffer-show-groups
+                   (format " [%s] " (awesome-tab-tab-tabset tab))
+                 (format " %s " (awesome-tab-tab-value tab)))))
     ;; Unless the tab bar auto scrolls to keep the selected tab
     ;; visible, shorten the tab label to keep as many tabs as possible
     ;; in the visible area of the tab bar.
@@ -1422,6 +1477,17 @@ That is, a string used to represent it on the tab bar."
        label (max 1 (/ (window-width)
                        (length (awesome-tab-view
                                 (awesome-tab-current-tabset)))))))))
+
+(defun awesome-tab-buffer-tab-key (tab-index)
+  "Return a key for TAB.
+That is, a string with properties used to represent it on the tab bar."
+  (propertize
+   (concat
+    "["
+    (char-to-string
+     (or (nth tab-index awesome-tab-keys) ?\e))
+    "]")
+   'face 'awesome-tab-key))
 
 (defun awesome-tab-buffer-select-tab (event tab)
   "On mouse EVENT, select TAB."
@@ -1435,8 +1501,7 @@ That is, a string used to represent it on the tab bar."
      (t
       (switch-to-buffer buffer)))
     ;; Don't show groups.
-    (awesome-tab-buffer-show-groups nil)
-    ))
+    (awesome-tab-buffer-show-groups nil)))
 
 (defun awesome-tab-buffer-click-on-home (event)
   "Handle a mouse click EVENT on the tab bar home button.
@@ -1447,8 +1512,8 @@ mouse-3, close the current buffer."
      ((eq mouse-button 'mouse-1)
       (awesome-tab-buffer-show-groups (not awesome-tab--buffer-show-groups)))
      ((eq mouse-button 'mouse-3)
-      (kill-buffer nil))
-     )))
+      (kill-buffer nil)))))
+
 
 (defun awesome-tab-buffer-track-killed ()
   "Hook run just before actually killing a buffer.
@@ -1483,10 +1548,11 @@ Run as `awesome-tab-init-hook'."
         awesome-tab--buffer-show-groups nil
         awesome-tab-current-tabset-function 'awesome-tab-buffer-tabs
         awesome-tab-tab-label-function 'awesome-tab-buffer-tab-label
+        awesome-tab-tab-key-function 'awesome-tab-buffer-tab-key
         awesome-tab-select-tab-function 'awesome-tab-buffer-select-tab
         awesome-tab-button-label-function 'awesome-tab-buffer-button-label
-        awesome-tab-home-function 'awesome-tab-buffer-click-on-home
-        )
+        awesome-tab-home-function 'awesome-tab-buffer-click-on-home)
+
   (add-hook 'kill-buffer-hook 'awesome-tab-buffer-track-killed))
 
 (defun awesome-tab-buffer-quit ()
@@ -1498,8 +1564,8 @@ Run as `awesome-tab-quit-hook'."
         awesome-tab-tab-label-function nil
         awesome-tab-select-tab-function nil
         awesome-tab-button-label-function nil
-        awesome-tab-home-function nil
-        )
+        awesome-tab-home-function nil)
+
   (remove-hook 'kill-buffer-hook 'awesome-tab-buffer-track-killed))
 
 (add-hook 'awesome-tab-init-hook 'awesome-tab-buffer-init)
@@ -1514,16 +1580,16 @@ Run as `awesome-tab-quit-hook'."
                                (with-current-buffer b
                                  (list (current-buffer)
                                        (buffer-name)
-                                       (funcall awesome-tab-buffer-groups-function) )))
+                                       (funcall awesome-tab-buffer-groups-function))))
                            (funcall awesome-tab-buffer-list-function)))
          (groups (awesome-tab-get-groups))
-         (group-name (or groupname (ido-completing-read "Groups: " groups))) )
+         (group-name (or groupname (ido-completing-read "Groups: " groups))))
     (catch 'done
       (mapc
        #'(lambda (group)
            (when (equal group-name (car (car (cdr (cdr group)))))
              (throw 'done (switch-to-buffer (car (cdr group))))))
-       tab-buffer-list) )))
+       tab-buffer-list))))
 
 (defun awesome-tab-select-end-tab ()
   "Select end tab of current tabset."
@@ -1625,8 +1691,8 @@ Optional argument REVERSED default is move backward, if reversed is non-nil move
     (awesome-tab-kill-buffer-match-rule
      (lambda (buffer) t))
     ;; Switch to next group.
-    (awesome-tab-forward-group)
-    ))
+    (awesome-tab-forward-group)))
+
 
 (defun awesome-tab-kill-other-buffers-in-current-group ()
   "Kill all buffers except current buffer in current group."
@@ -1635,8 +1701,8 @@ Optional argument REVERSED default is move backward, if reversed is non-nil move
          (currentbuffer (current-buffer)))
     ;; Kill all buffers in current group.
     (awesome-tab-kill-buffer-match-rule
-     (lambda (buffer) (not (equal buffer currentbuffer))))
-    ))
+     (lambda (buffer) (not (equal buffer currentbuffer))))))
+
 
 (defun awesome-tab-kill-match-buffers-in-current-group ()
   "Kill all buffers match extension in current group."
@@ -1650,12 +1716,12 @@ Optional argument REVERSED default is move backward, if reversed is non-nil move
     (awesome-tab-kill-buffer-match-rule
      (lambda (buffer)
        (let ((filename (buffer-file-name buffer)))
-         (and filename (string-equal (file-name-extension filename) match-extension))
-         )))
+         (and filename (string-equal (file-name-extension filename) match-extension)))))
+
     ;; Switch to next group if last file killed.
     (when (equal (length extension-names) 1)
-      (awesome-tab-forward-group))
-    ))
+      (awesome-tab-forward-group))))
+
 
 (defun awesome-tab-keep-match-buffers-in-current-group ()
   "Keep all buffers match extension in current group."
@@ -1669,12 +1735,12 @@ Optional argument REVERSED default is move backward, if reversed is non-nil move
     (awesome-tab-kill-buffer-match-rule
      (lambda (buffer)
        (let ((filename (buffer-file-name buffer)))
-         (and filename (not (string-equal (file-name-extension filename) match-extension)))
-         )))
+         (and filename (not (string-equal (file-name-extension filename) match-extension))))))
+
     ;; Switch to next group if last file killed.
     (when (equal (length extension-names) 1)
-      (awesome-tab-forward-group))
-    ))
+      (awesome-tab-forward-group))))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;; Utils functions ;;;;;;;;;;;;;;;;;;;;;;;
 (defun awesome-tab-get-groups ()
@@ -1692,8 +1758,8 @@ Optional argument REVERSED default is move backward, if reversed is non-nil move
               (with-current-buffer buffer
                 (when (string-equal current-group-name (cdr (awesome-tab-selected-tab (awesome-tab-current-tabset t))))
                   (when (buffer-file-name buffer)
-                    (add-to-list 'extension-names (file-name-extension (buffer-file-name buffer))))
-                  )))
+                    (add-to-list 'extension-names (file-name-extension (buffer-file-name buffer)))))))
+
           (buffer-list))
     extension-names))
 
@@ -1703,8 +1769,8 @@ Optional argument REVERSED default is move backward, if reversed is non-nil move
                (with-current-buffer buffer
                  (when (string-equal current-group-name (cdr (awesome-tab-selected-tab (awesome-tab-current-tabset t))))
                    (when (funcall ,match-rule buffer)
-                     (kill-buffer buffer))
-                   )))
+                     (kill-buffer buffer)))))
+
            (buffer-list))))
 
 ;;;;;;;;;;;;;;;;;;;;;;; Default configurations ;;;;;;;;;;;;;;;;;;;;;;;
@@ -1719,8 +1785,8 @@ Optional argument REVERSED default is move backward, if reversed is non-nil move
 (dolist (hook (list
                'magit-status-mode-hook
                'magit-popup-mode-hook
-               'reb-mode-hook
-               ))
+               'reb-mode-hook))
+
   (add-hook hook '(lambda () (setq-local header-line-format nil))))
 
 ;; Rules to control buffer's group rules.
@@ -1763,8 +1829,8 @@ Other buffer group by `awesome-tab-in-project-p' with project name."
                             magit-log-mode
                             magit-file-mode
                             magit-blob-mode
-                            magit-blame-mode
-                            )))
+                            magit-blame-mode)))
+
      "Emacs")
     ((derived-mode-p 'eshell-mode)
      "EShell")
@@ -1777,8 +1843,8 @@ Other buffer group by `awesome-tab-in-project-p' with project name."
     (t
      (if (awesome-tab-in-project-p)
          (awesome-tab-get-group-name (current-buffer))
-       "Common"))
-    )))
+       "Common")))))
+
 
 ;; Helm source for switching group in helm.
 (defvar helm-source-awesome-tab-group nil)
@@ -1813,8 +1879,8 @@ Other buffer group by `awesome-tab-in-project-p' with project name."
      (not (string-prefix-p "*Compile-Log*" name))
      (not (string-prefix-p "*lsp" name))
      (not (and (string-prefix-p "magit" name)
-               (not (file-name-extension name))))
-     )))
+               (not (file-name-extension name)))))))
+
 
 (provide 'awesome-tab)
 
