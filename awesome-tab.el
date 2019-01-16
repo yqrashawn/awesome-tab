@@ -209,6 +209,9 @@ string to display.")
   "Function called when clicking on the tab bar home button.
 The function is passed the mouse event received.")
 
+(defvar awesome-tab-use-projectile-find-project-info t
+  "Weather use projectile to get project information.")
+
 (defvar awesome-tab-scroll-left-function 'awesome-tab-scroll-left
   "Function that scrolls tabs on left.
 The function is passed the mouse event received when clicking on the
@@ -1803,10 +1806,17 @@ Optional argument REVERSED default is move backward, if reversed is non-nil move
       (awesome-tab-set-group-name buf))))
 
 (defun awesome-tab-in-project-p ()
-  (cdr (project-current)))
+  (if awesome-tab-use-projectile-find-project-info
+      (projectile-project-root)
+    (cdr (project-current))))
 
 (defun awesome-tab-project-name ()
-  (format "Project: %s" (expand-file-name (cdr (project-current)))))
+  (if awesome-tab-use-projectile-find-project-info
+      (projectile-project-name)
+    (format
+     "Project: %s"
+     (expand-file-name
+      (cdr (project-current))))))
 
 (defun awesome-tab-set-group-name (buf)
   (with-current-buffer buf
