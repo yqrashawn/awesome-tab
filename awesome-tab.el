@@ -425,7 +425,7 @@ Return TAB if selected, nil if not."
 Does nothing if a tab with index INDEX is not found in TABSET.
 Return the tab selected, or nil if nothing was selected."
   (let ((tabset (or tabset awesome-tab-current-tabset)))
-    (awesome-tab-select-tab (nth index (awesome-tab-tabs tabset))  tabset)))
+    (awesome-tab-select-tab (nth (+ index (awesome-tab-start awesome-tab-current-tabset)) (awesome-tab-tabs tabset))  tabset)))
 
 (defsubst awesome-tab-select-tab-value (object tabset)
   "Make the tab with value OBJECT, the selected tab in TABSET.
