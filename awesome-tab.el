@@ -168,6 +168,11 @@ visible."
   :group 'awesome-tab
   :type 'boolean)
 
+(defcustom awesome-tab-show-tab-keys t
+  "Whether to show tab keys."
+  :type  'boolean
+  :group 'awesome-tab)
+
 (defcustom awesome-tab-keys '(?a ?s ?d ?f ?g ?h ?j ?k ?l ?\; ?q ?w ?e ?r
                                  ?t ?y ?u ?i ?o ?p ?z ?x ?c ?v ?b ?n ?m
                                  ?A ?S ?D ?F ?G ?H ?J ?K ?L ?Q ?W ?E ?R
@@ -175,7 +180,8 @@ visible."
   "Default keys for jumping to specific tabs tabs. Any key is character
 representing a self-inserting key (letters, digits, punctuation, etc.)."
   :type '(repeat :tag "Keys" (choice
-                              (character :tag "char"))))
+                              (character :tag "char")))
+  :group 'awesome-tab)
 
 (defvar awesome-tab-inhibit-functions '(awesome-tab-default-inhibit-function)
   "List of functions to be called before displaying the tab bar.
@@ -948,7 +954,7 @@ That is, a propertized string used as an `header-line-format' template
 element.
 Call `awesome-tab-tab-label-function' to obtain a label for TAB."
   (concat
-   (if (and tab-index awesome-tab-tab-key-function)
+   (if (and awesome-tab-show-tab-keys tab-index awesome-tab-tab-key-function)
        (funcall awesome-tab-tab-key-function tab-index)
      "")
    (propertize
@@ -1488,7 +1494,7 @@ That is, a string with properties used to represent it on the tab bar."
    (concat
     "["
     (char-to-string
-     (or (nth tab-index awesome-tab-keys) ?\e))
+     (or (nth tab-index awesome-tab-keys) ?\s))
     "]")
    'face 'awesome-tab-key))
 
